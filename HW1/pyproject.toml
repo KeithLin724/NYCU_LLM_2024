@@ -12,6 +12,7 @@ numpy = "^2.1.2"
 torch = "^2.5.0"
 ipykernel = "^6.29.5"
 matplotlib = "^3.9.2"
+rich = "^13.9.2"
 
 
 [build-system]
