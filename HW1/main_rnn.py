@@ -11,6 +11,7 @@ from tqdm import tqdm
 import pandas as pd
 from pathlib import Path
 from lightning.pytorch.callbacks import ModelCheckpoint
+import re
 
 
 @dataclass
@@ -25,10 +26,16 @@ class Lib:
     def index_2_word(self, index: int) -> str:
         return self.idx2word.get(index, "")
 
+    @staticmethod
+    def natural_split(text: str) -> list[str]:
+        pattern = r"([a-zA-Z0-9]+|[^\s\w]|[\s]+)"
+        result = re.findall(pattern, text)
+        return result
+
     @classmethod
     def build_from_text(cls, str_list: list[str]):
         group = " ".join(str_list)
-        vocab = set(group.split(" "))
+        vocab = set(Lib.natural_split(group))
 
         word2idx = {word: i for i, word in enumerate(vocab)}
         idx2word = {idx: word for word, idx in word2idx.items()}
