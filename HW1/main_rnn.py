@@ -21,10 +21,10 @@ class Lib:
     size: int
 
     def word_2_index(self, word: str) -> int:
-        return self.word2idx.get(word, 0)
+        return self.word2idx.get(word, self.word2idx[" "])
 
     def index_2_word(self, index: int) -> str:
-        return self.idx2word.get(index, "")
+        return self.idx2word.get(index, " ")
 
     @staticmethod
     def natural_split(text: str) -> list[str]:
