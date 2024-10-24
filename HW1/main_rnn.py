@@ -12,6 +12,7 @@ import pandas as pd
 from pathlib import Path
 from lightning.pytorch.callbacks import ModelCheckpoint
 import re
+from collections import defaultdict, Counter
 
 
 @dataclass
@@ -69,10 +70,10 @@ class Lib:
 
 class TextDataset(Dataset):
     def __init__(self, sentences: str, n: int, text_lib: Lib):
-        self.data = []
         self.n = n
         self.text_lib = text_lib
 
+        data_dict = defaultdict(list)
         for sentence in tqdm(
             sentences, desc="process", unit="line", dynamic_ncols=True, leave=True
         ):
@@ -82,7 +83,21 @@ class TextDataset(Dataset):
                 input_str = line[i : i + n]
                 target_str = line[i + n]
 
-                self.data.append(tuple([" ".join(input_str), target_str]))
+                k, v = " ".join(input_str), target_str
+
+                data_dict[k].append(v)
+
+        for k in tqdm(
+            data_dict.keys(),
+            desc="counting",
+            unit="pair",
+            dynamic_ncols=True,
+            leave=True,
+        ):
+            large_word = Counter(data_dict[k]).most_common(1)
+            data_dict[k] = large_word[0][0]
+
+        self.data = list(data_dict.items())
 
         return
 
@@ -188,7 +203,7 @@ epoch = 10
 batch_size = 32
 number_of_layer = 2
 hidden = 128
-embedding_dim = 128
+embedding_dim = 512
 
 
 lib = Lib.build_from_file("./train.txt")
