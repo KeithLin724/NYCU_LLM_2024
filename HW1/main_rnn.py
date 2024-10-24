@@ -5,6 +5,7 @@ import torch.optim as optim
 import numpy as np
 import lightning as L
 import torch.nn.functional as F
+from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset
 from pytorch_lightning import loggers as pl_loggers
 from tqdm import tqdm
@@ -36,10 +37,16 @@ class Lib:
     @classmethod
     def build_from_text(cls, str_list: list[str]):
         group = " ".join(str_list)
-        vocab = set(Lib.natural_split(group, False))
+        vocab = set(Lib.natural_split(group, False) + ["<START>", "<END>", "<PAD>"])
 
-        word2idx = {word: i for i, word in enumerate(vocab)}
-        idx2word = {idx: word for word, idx in word2idx.items()}
+        word2idx = {
+            word: i
+            for i, word in tqdm(enumerate(vocab), desc="build word 2 idx", unit="word")
+        }
+        idx2word = {
+            idx: word
+            for word, idx in tqdm(word2idx.items(), desc="build idx 2 word", unit="idx")
+        }
 
         return cls(word2idx, idx2word, len(word2idx))
 
@@ -88,6 +95,9 @@ class TextDataset(Dataset):
                 leave=True,
             ):
                 line = Lib.natural_split(sentence)
+
+                line = ["<START>"] + line + ["<END>"] + ["<PAD>"] * (n - len(line))
+
                 for i in range(len(line) - n):
                     input_str = line[i : i + n]
                     target_str = line[i + n]
@@ -131,7 +141,7 @@ class TextDataset(Dataset):
     def __getitem__(self, index: int) -> tuple[torch.Tensor, torch.Tensor]:
         input_str, target_str = self.data[index]
         input_tensor = self.text_lib.sentence_to_idx_tensor(input_str)
-        target_tensor = self.text_lib.word_to_tensor(target_str)
+        target_tensor = self.text_lib.sentence_to_idx_tensor([target_str])
         return input_tensor, target_tensor
 
     @classmethod
@@ -158,7 +168,13 @@ class RnnModel(L.LightningModule):
     ):
         super().__init__()
         self.embedding = nn.Embedding(vocab_size, embedding_dim)
-        self.rnn = nn.RNN(embedding_dim, hidden_size, num_layers, batch_first=True)
+        self.rnn = nn.RNN(
+            embedding_dim,
+            hidden_size,
+            num_layers,
+            batch_first=True,
+            dropout=0.1,
+        )
         self.fc = nn.Linear(hidden_size, output_size)
         return
 
@@ -166,7 +182,6 @@ class RnnModel(L.LightningModule):
         x = self.embedding(x)
         out, _ = self.rnn(x)
         out = self.fc(out[:, -1, :])
-        out = F.softmax(out, dim=1)
         return out
 
     def configure_optimizers(self):
@@ -176,6 +191,7 @@ class RnnModel(L.LightningModule):
     def training_step(self, train_batch, batch_idx):
 
         input_tensor, target_tensor = train_batch
+        target_tensor = target_tensor.squeeze(dim=1)
 
         output = self.forward(input_tensor)
         loss = F.cross_entropy(input=output, target=target_tensor)
@@ -183,10 +199,8 @@ class RnnModel(L.LightningModule):
             "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
 
-        predicted_tensor, target_tensor_idx = torch.argmax(output, dim=1), torch.argmax(
-            target_tensor, dim=1
-        )
-        accuracy = (predicted_tensor == target_tensor_idx).float().mean()
+        predicted_tensor = torch.argmax(output, dim=1)
+        accuracy = (predicted_tensor == target_tensor).float().mean()
 
         self.log(
             "tran_acc",
@@ -201,6 +215,7 @@ class RnnModel(L.LightningModule):
     def validation_step(self, val_batch, batch_idx):
 
         input_tensor, target_tensor = val_batch
+        target_tensor = target_tensor.squeeze(dim=1)
 
         output = self.forward(input_tensor)
         loss = F.cross_entropy(input=output, target=target_tensor)
@@ -208,10 +223,8 @@ class RnnModel(L.LightningModule):
             "test_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
         )
 
-        predicted_tensor, target_tensor_idx = torch.argmax(output, dim=1), torch.argmax(
-            target_tensor, dim=1
-        )
-        accuracy = (predicted_tensor == target_tensor_idx).float().mean()
+        predicted_tensor = torch.argmax(output, dim=1)
+        accuracy = (predicted_tensor == target_tensor).float().mean()
 
         self.log(
             "test_acc",
@@ -229,8 +242,9 @@ epoch = 10
 batch_size = 5000
 number_of_layer = 2
 hidden = 128
-embedding_dim = 256
-prefix_len = [3]
+embedding_dim = 128
+prefix_len = [2, 3, 4]
+num_workers = 1
 
 lib = Lib.build_from_file("./train.txt")
 
@@ -250,7 +264,7 @@ print(model)
 tb_logger = pl_loggers.TensorBoardLogger("logs/")
 
 checkpoint_callback = ModelCheckpoint(
-    monitor="train_loss",
+    monitor="test_loss",
     dirpath="checkpoints",
     filename="model-{epoch:02d}-{train_loss:.2f}",
     save_top_k=3,
@@ -263,7 +277,6 @@ trainer = L.Trainer(
     logger=tb_logger,
     default_root_dir="out/",
     max_epochs=epoch,
-    # progress_bar_refresh_rate=1
 )
 
 train_dataset = TextDataset.build_from_file(
@@ -274,14 +287,40 @@ train_dataset = TextDataset.build_from_file(
 )
 test_dataset = TextDataset.build_from_file(
     "./test.txt",
-    n_list=[3],
+    n_list=[4],
     lib=lib,
     train_mode=False,
 )
 
 print(f"Train : {len(train_dataset)}, Test : {len(test_dataset)}")
 
-train_dataloader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True)
-test_dataloader = DataLoader(test_dataset, batch_size=5000, shuffle=True)
+
+def pad_collate(batch) -> tuple[torch.Tensor, torch.Tensor]:
+    inputs, targets = zip(*batch)
+
+    # 使用 PyTorch 的 pad_sequence 函数对输入进行填充
+    inputs = pad_sequence(
+        inputs, batch_first=True, padding_value=lib.word_2_index("<PAD>")
+    )
+    targets = pad_sequence(
+        targets, batch_first=True, padding_value=lib.word_2_index("<PAD>")
+    )
+
+    return inputs, targets
+
+
+train_dataloader = DataLoader(
+    train_dataset,
+    batch_size=batch_size,
+    shuffle=True,
+    num_workers=num_workers,
+    collate_fn=pad_collate,
+)
+test_dataloader = DataLoader(
+    test_dataset,
+    batch_size=5000,
+    shuffle=False,
+    num_workers=num_workers,
+)
 
 trainer.fit(model, train_dataloader, test_dataloader, ckpt_path="last")
