@@ -176,6 +176,7 @@ class RnnModel(L.LightningModule):
             dropout=0.1,
         )
         self.fc = nn.Linear(hidden_size, output_size)
+        self.save_hyperparameters()
         return
 
     def forward(self, x):
@@ -195,21 +196,17 @@ class RnnModel(L.LightningModule):
 
         output = self.forward(input_tensor)
         loss = F.cross_entropy(input=output, target=target_tensor)
-        self.log(
-            "train_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
 
         predicted_tensor = torch.argmax(output, dim=1)
         accuracy = (predicted_tensor == target_tensor).float().mean()
 
-        self.log(
-            "tran_acc",
-            accuracy,
+        self.log_dict(
+            {"train_loss": loss, "tran_acc": accuracy},
             on_step=True,
             on_epoch=True,
-            prog_bar=True,
             logger=True,
         )
+
         return loss
 
     def validation_step(self, val_batch, batch_idx):
@@ -219,30 +216,57 @@ class RnnModel(L.LightningModule):
 
         output = self.forward(input_tensor)
         loss = F.cross_entropy(input=output, target=target_tensor)
-        self.log(
-            "test_loss", loss, on_step=True, on_epoch=True, prog_bar=True, logger=True
-        )
 
         predicted_tensor = torch.argmax(output, dim=1)
         accuracy = (predicted_tensor == target_tensor).float().mean()
 
-        self.log(
-            "test_acc",
-            accuracy,
+        self.log_dict(
+            {"val_loss": loss, "val_acc": accuracy},
             on_step=True,
             on_epoch=True,
-            prog_bar=True,
             logger=True,
         )
 
-        return loss
+        return
+
+    def test_step(self, test_batch, batch_idx):
+
+        input_tensor, target_tensor = test_batch
+        target_tensor = target_tensor.squeeze(dim=1)
+
+        output = self.forward(input_tensor)
+        loss = F.cross_entropy(input=output, target=target_tensor)
+
+        predicted_tensor = torch.argmax(output, dim=1)
+        accuracy = (predicted_tensor == target_tensor).float().mean()
+
+        self.log_dict(
+            {"test_loss": loss, "test_acc": accuracy},
+            on_step=True,
+            on_epoch=True,
+            logger=True,
+        )
+
+        return
+
+    def predict_step(self, predict_batch, batch_idx):
+        input_tensor, target_tensor = predict_batch
+        target_tensor = target_tensor.squeeze(dim=1)
+
+        output = self.forward(input_tensor)
+        # loss = F.cross_entropy(input=output, target=target_tensor)
+
+        predicted_tensor = torch.argmax(output, dim=1)
+        # accuracy = (predicted_tensor == target_tensor).float().mean()
+
+        return predicted_tensor
 
 
 epoch = 10
 batch_size = 5000
 number_of_layer = 2
 hidden = 128
-embedding_dim = 128
+embedding_dim = 256
 prefix_len = [2, 3, 4]
 num_workers = 1
 
@@ -266,14 +290,13 @@ tb_logger = pl_loggers.TensorBoardLogger("logs/")
 checkpoint_callback = ModelCheckpoint(
     monitor="test_loss",
     dirpath="checkpoints",
-    filename="model-{epoch:02d}-{train_loss:.2f}",
+    filename="model-{epoch:02d}-{test_loss:.2f}",
     save_top_k=3,
     mode="min",
 )
 
 trainer = L.Trainer(
     callbacks=[checkpoint_callback],
-    accelerator="gpu",
     logger=tb_logger,
     default_root_dir="out/",
     max_epochs=epoch,
@@ -323,4 +346,12 @@ test_dataloader = DataLoader(
     num_workers=num_workers,
 )
 
-trainer.fit(model, train_dataloader, test_dataloader, ckpt_path="last")
+trainer.fit(
+    model=model,
+    train_dataloaders=train_dataloader,
+    val_dataloaders=test_dataloader,
+    ckpt_path="last",
+)
+
+test_out = trainer.test(model=model, dataloaders=test_dataloader, verbose=True)
+print(test_out)
