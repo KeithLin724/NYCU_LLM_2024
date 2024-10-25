@@ -7,13 +7,15 @@ import lightning as L
 import torch.nn.functional as F
 from torch.nn.utils.rnn import pad_sequence
 from torch.utils.data import DataLoader, Dataset
-from pytorch_lightning import loggers as pl_loggers
+from lightning.pytorch.loggers import TensorBoardLogger
 from tqdm import tqdm
 import pandas as pd
 from pathlib import Path
 from lightning.pytorch.callbacks import ModelCheckpoint
 import re
 from collections import defaultdict, Counter
+
+torch.set_float32_matmul_precision("high")
 
 
 @dataclass
@@ -23,7 +25,7 @@ class Lib:
     size: int
 
     def word_2_index(self, word: str) -> int:
-        return self.word2idx.get(word, self.word2idx[" "])
+        return self.word2idx.get(word, self.word2idx["<UNK>"])
 
     def index_2_word(self, index: int) -> str:
         return self.idx2word.get(index, " ")
@@ -37,7 +39,9 @@ class Lib:
     @classmethod
     def build_from_text(cls, str_list: list[str]):
         group = " ".join(str_list)
-        vocab = set(Lib.natural_split(group, False) + ["<START>", "<END>", "<PAD>"])
+        vocab = set(
+            Lib.natural_split(group, False) + ["<START>", "<END>", "<PAD>", "<UNK>"]
+        )
 
         word2idx = {
             word: i
@@ -266,7 +270,7 @@ epoch = 10
 batch_size = 5000
 number_of_layer = 2
 hidden = 128
-embedding_dim = 256
+embedding_dim = 128
 prefix_len = [2, 3, 4]
 num_workers = 1
 
@@ -285,14 +289,15 @@ model = RnnModel(
 print(model)
 
 
-tb_logger = pl_loggers.TensorBoardLogger("logs/")
+tb_logger = TensorBoardLogger("logs/")
 
 checkpoint_callback = ModelCheckpoint(
-    monitor="test_loss",
+    monitor="val_loss",
     dirpath="checkpoints",
-    filename="model-{epoch:02d}-{test_loss:.2f}",
+    filename="model-{epoch:02d}-{val_loss:.2f}",
     save_top_k=3,
     mode="min",
+    save_last=True,
 )
 
 trainer = L.Trainer(
