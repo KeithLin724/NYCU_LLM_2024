@@ -20,6 +20,7 @@ tensorboardx = "^2.6.2.2"
 tensorboard = "^2.18.0"
 papermill = "^2.6.0"
 nbconvert = "^7.16.4"
+natsort = "^8.4.0"
 
 
 [build-system]
