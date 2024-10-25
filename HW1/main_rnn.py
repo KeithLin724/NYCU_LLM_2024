@@ -14,6 +14,7 @@ from pathlib import Path
 from lightning.pytorch.callbacks import ModelCheckpoint
 import re
 from collections import defaultdict, Counter
+from natsort import natsorted
 
 torch.set_float32_matmul_precision("high")
 
@@ -25,7 +26,7 @@ class Lib:
     size: int
 
     def word_2_index(self, word: str) -> int:
-        return self.word2idx.get(word, self.word2idx["<UNK>"])
+        return self.word2idx.get(word, self.word2idx["<UNK>"])  # "<UNK>"
 
     def index_2_word(self, index: int) -> str:
         return self.idx2word.get(index, " ")
@@ -40,8 +41,11 @@ class Lib:
     def build_from_text(cls, str_list: list[str]):
         group = " ".join(str_list)
         vocab = set(
-            Lib.natural_split(group, False) + ["<START>", "<END>", "<PAD>", "<UNK>"]
+            Lib.natural_split(group, False)
+            + ["<START>", "<END>", "<PAD>", "<UNK>"]  # ,
         )
+
+        vocab = natsorted(vocab)
 
         word2idx = {
             word: i
@@ -293,7 +297,6 @@ tb_logger = TensorBoardLogger("logs/")
 
 checkpoint_callback = ModelCheckpoint(
     monitor="val_loss",
-    dirpath="checkpoints",
     filename="model-{epoch:02d}-{val_loss:.2f}",
     save_top_k=3,
     mode="min",
@@ -303,7 +306,6 @@ checkpoint_callback = ModelCheckpoint(
 trainer = L.Trainer(
     callbacks=[checkpoint_callback],
     logger=tb_logger,
-    default_root_dir="out/",
     max_epochs=epoch,
 )
 
