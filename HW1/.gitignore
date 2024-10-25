@@ -5,3 +5,4 @@ food-com-recipes-and-user-interactions/
 logs/
 checkpoints/
 logs_old/
+lightning_logs/
