@@ -6,3 +6,4 @@ logs/
 checkpoints/
 logs_old/
 lightning_logs/
+submit/
