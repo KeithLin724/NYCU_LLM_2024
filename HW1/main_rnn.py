@@ -14,6 +14,7 @@ from pathlib import Path
 from lightning.pytorch.callbacks import ModelCheckpoint
 import re
 from collections import defaultdict, Counter
+from typing import Callable
 from natsort import natsorted
 
 torch.set_float32_matmul_precision("high")
@@ -154,10 +155,18 @@ class TextDataset(Dataset):
 
     @classmethod
     def build_from_file(
-        cls, filename: str, n_list: int, lib: Lib = None, train_mode: bool = False
+        cls,
+        filename: str,
+        n_list: int,
+        lib: Lib = None,
+        train_mode: bool = False,
+        filter_: Callable = None,
     ):
         with open(file=filename, mode="r") as f:
             data = [line.strip() for line in f.readlines()]
+
+        if filter_ is not None:
+            data = list(filter(filter_, data))
 
         if lib is None:
             lib = Lib.build_from_text(data)
@@ -228,8 +237,16 @@ class RnnModel(L.LightningModule):
         predicted_tensor = torch.argmax(output, dim=1)
         accuracy = (predicted_tensor == target_tensor).float().mean()
 
+        # Calculate perplexity
+        log_probs = F.log_softmax(output, dim=-1)  # Get log probabilities
+        target_log_probs = log_probs.gather(1, target_tensor.unsqueeze(-1)).squeeze(
+            -1
+        )  # Log probs for true targets
+        avg_neg_log_prob = -target_log_probs.mean()  # Average negative log probability
+        perplexity = torch.exp(avg_neg_log_prob)  # Calculate perplexity
+
         self.log_dict(
-            {"val_loss": loss, "val_acc": accuracy},
+            {"val_loss": loss, "val_acc": accuracy, "val_perplexity": perplexity},
             on_step=True,
             on_epoch=True,
             logger=True,
@@ -237,19 +254,28 @@ class RnnModel(L.LightningModule):
 
         return
 
-    def test_step(self, test_batch, batch_idx):
-
+    def test_step(self, test_batch, batch_idx, dataloader_idx=0):
+        # Unpack test batch
         input_tensor, target_tensor = test_batch
         target_tensor = target_tensor.squeeze(dim=1)
 
+        # Forward pass
         output = self.forward(input_tensor)
         loss = F.cross_entropy(input=output, target=target_tensor)
 
         predicted_tensor = torch.argmax(output, dim=1)
         accuracy = (predicted_tensor == target_tensor).float().mean()
 
+        # Calculate perplexity
+        log_probs = F.log_softmax(output, dim=-1)  # Get log probabilities
+        target_log_probs = log_probs.gather(1, target_tensor.unsqueeze(-1)).squeeze(
+            -1
+        )  # Log probs for true targets
+        avg_neg_log_prob = -target_log_probs.mean()  # Average negative log probability
+        perplexity = torch.exp(avg_neg_log_prob)  # Calculate perplexity
+
         self.log_dict(
-            {"test_loss": loss, "test_acc": accuracy},
+            {"test_loss": loss, "test_acc": accuracy, "test_perplexity": perplexity},
             on_step=True,
             on_epoch=True,
             logger=True,
@@ -271,12 +297,13 @@ class RnnModel(L.LightningModule):
 
 
 epoch = 10
-batch_size = 5000
+batch_size = 12000
 number_of_layer = 2
 hidden = 128
 embedding_dim = 128
-prefix_len = [2, 3, 4]
-num_workers = 1
+prefix_len = [2, 3, 9]
+num_workers_train = 0
+num_workers_test = 2
 
 lib = Lib.build_from_file("./train.txt")
 
@@ -303,11 +330,7 @@ checkpoint_callback = ModelCheckpoint(
     save_last=True,
 )
 
-trainer = L.Trainer(
-    callbacks=[checkpoint_callback],
-    logger=tb_logger,
-    max_epochs=epoch,
-)
+trainer = L.Trainer(callbacks=[checkpoint_callback], logger=tb_logger, max_epochs=epoch)
 
 train_dataset = TextDataset.build_from_file(
     "./train.txt",
@@ -317,9 +340,10 @@ train_dataset = TextDataset.build_from_file(
 )
 test_dataset = TextDataset.build_from_file(
     "./test.txt",
-    n_list=[4],
+    n_list=[9],
     lib=lib,
     train_mode=False,
+    filter_=lambda x: len(x.split(" ")) > 9,
 )
 
 print(f"Train : {len(train_dataset)}, Test : {len(test_dataset)}")
@@ -343,14 +367,14 @@ train_dataloader = DataLoader(
     train_dataset,
     batch_size=batch_size,
     shuffle=True,
-    num_workers=num_workers,
+    num_workers=num_workers_train,
     collate_fn=pad_collate,
 )
 test_dataloader = DataLoader(
     test_dataset,
     batch_size=5000,
     shuffle=False,
-    num_workers=num_workers,
+    num_workers=num_workers_test,
 )
 
 trainer.fit(
