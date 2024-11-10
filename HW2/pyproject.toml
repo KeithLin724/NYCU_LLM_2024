@@ -17,6 +17,7 @@ langchain-community = "^0.3.5"
 chromadb = "^0.5.18"
 pypdf = "^5.1.0"
 langchain-chroma = "^0.1.4"
+transformers = "^4.46.2"
 
 
 [build-system]
