@@ -4606,6 +4606,20 @@ files = [
 tests = ["pytest", "pytest-cov"]
 
 [[package]]
+name = "tf-keras"
+version = "2.18.0"
+description = "Deep learning for humans."
+optional = false
+python-versions = ">=3.9"
+files = [
+    {file = "tf_keras-2.18.0-py3-none-any.whl", hash = "sha256:c431d04027eef790fcd3261cf7fdf93eb74f3cb32e05078b57b7f5a54bd53262"},
+    {file = "tf_keras-2.18.0.tar.gz", hash = "sha256:ebf744519b322afead33086a2aba872245473294affd40973694f3eb7c7ad77d"},
+]
+
+[package.dependencies]
+tensorflow = ">=2.18,<2.19"
+
+[[package]]
 name = "tokenizers"
 version = "0.20.3"
 description = ""
@@ -5668,4 +5682,4 @@ type = ["pytest-mypy"]
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.11"
-content-hash = "2c05c91eb4581478790b6c76d729dcf9b0bf1101425118148fc0b2ce84217e51"
+content-hash = "d173499fbbc65b598e28e4c38aac51adf3068c39165825ea85f6047e77ebc7ef"

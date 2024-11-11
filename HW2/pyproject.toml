@@ -20,6 +20,7 @@ langchain-chroma = "^0.1.4"
 transformers = "^4.46.2"
 tensorflow = "^2.18.0"
 datasets = "^3.1.0"
+tf-keras = "^2.18.0"
 
 
 [build-system]
