@@ -21,6 +21,10 @@ transformers = {extras = ["torch"], version = "^4.46.2"}
 tensorflow = "^2.18.0"
 datasets = "^3.1.0"
 tf-keras = "^2.18.0"
+matplotlib = "^3.9.2"
+rouge-score = "^0.1.2"
+evaluate = "^0.4.3"
+tqdm = "^4.67.0"
 
 
 [build-system]
