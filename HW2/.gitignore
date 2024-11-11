@@ -5,3 +5,4 @@ backup/
 *.pdf
 results/
 logs/
+results_soft_prompt/
