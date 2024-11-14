@@ -25,6 +25,8 @@ matplotlib = "^3.9.2"
 rouge-score = "^0.1.2"
 evaluate = "^0.4.3"
 tqdm = "^4.67.0"
+langchain-ollama = "^0.2.0"
+python-dotenv = "^1.0.1"
 
 
 [build-system]
