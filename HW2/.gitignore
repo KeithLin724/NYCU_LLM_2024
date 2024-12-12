@@ -1,0 +1,10 @@
+.vscode/
+.venv/
+backup/
+*.csv
+*.pdf
+results/
+logs/
+results_soft_prompt/
+results_softprompt/
+.env
