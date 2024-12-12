@@ -5,3 +5,4 @@
 ---
 
 HW1 : [here](./HW1/)
+HW2 : [here](./HW2/)
